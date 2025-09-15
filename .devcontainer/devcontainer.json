@@ -1,0 +1,8 @@
+{
+  "name": "yorvo-kernel dev",
+  "image": "mcr.microsoft.com/devcontainers/base:ubuntu",
+  "features": {
+    "ghcr.io/devcontainers/features/common-utils:2": {}
+  },
+  "postCreateCommand": "sudo apt update && sudo apt install -y curl jq xz-utils bc bison flex libssl-dev libelf-dev dwarves libncurses-dev zstd"
+}
