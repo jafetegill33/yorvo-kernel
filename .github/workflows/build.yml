@@ -1,0 +1,59 @@
+name: Build yorvo-kernel (latest stable)
+
+on:
+  push:
+    branches: [ "main" ]
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install build deps
+        run: |
+          sudo apt update
+          sudo apt install -y build-essential bc bison flex libssl-dev \
+            libelf-dev dwarves fakeroot rsync llvm clang lld libncurses-dev zstd \
+            curl jq tar xz-utils
+
+      - name: Determine latest stable kernel
+        id: latest
+        run: |
+          ver=$(curl -fsSL https://www.kernel.org/releases.json | jq -r '.latest_stable.version')
+          if [ -z "$ver" ] || [ "$ver" = "null" ]; then
+            echo "Could not determine latest stable kernel" >&2
+            exit 1
+          fi
+          echo "version=$ver" >> $GITHUB_OUTPUT
+          echo "Latest stable: $ver"
+
+      - name: Download kernel source
+        run: |
+          ver=${{ steps.latest.outputs.version }}
+          curl -fSLo linux-$ver.tar.xz https://cdn.kernel.org/pub/linux/kernel/v${ver%%.*}.x/linux-$ver.tar.xz
+          tar -xf linux-$ver.tar.xz
+          ln -s linux-$ver linux
+
+      - name: Merge Yorvo config
+        run: |
+          cd linux
+          make x86_64_defconfig
+          scripts/kconfig/merge_config.sh .config ../config/yorvo-desktop.cfg
+          yes "" | make oldconfig
+
+      - name: Build Debian packages (LLVM)
+        run: |
+          cd linux
+          export LLVM=1 CC=clang
+          make -j"$(nproc)" bindeb-pkg LLVM=1
+
+      - name: Upload artifacts (.deb)
+        uses: actions/upload-artifact@v4
+        with:
+          name: yorvo-kernel-debs
+          path: |
+            ./*.deb
+            ../*.deb
